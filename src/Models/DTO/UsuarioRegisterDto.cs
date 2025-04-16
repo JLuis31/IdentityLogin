@@ -14,7 +14,8 @@ namespace Aplication.Models
         [Required(ErrorMessage = "El campo es obligatorio.")]
         [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$",
             ErrorMessage = "La contraseña debe tener al menos 8 caracteres, una letra mayúscula, una letra minúscula, un número y un carácter especial.")]
-        [DefaultValue("Princesa01@")]
+        [DefaultValue("Example@123")]
+        [Display(Name = "Contraseña")]
         [DataType(DataType.Password)]
         public string Password { get; set; }
 
