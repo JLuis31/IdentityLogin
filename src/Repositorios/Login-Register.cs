@@ -10,6 +10,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 
 namespace Aplication.Repositorios
 {
@@ -48,7 +49,8 @@ namespace Aplication.Repositorios
             {
                 var roles = await _userManager.GetRolesAsync(usuarioExistente);
                 var token = await GenerarToken(usuarioExistente, roles);
-                return new { token = token };
+                var refreshToken = await GenerarRefreshToken(email);
+                return new { token = token, refreshToken = refreshToken };
             }
             else
             {
@@ -86,6 +88,45 @@ namespace Aplication.Repositorios
             );
             return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
 
+        }
+
+        public async Task<string> GenerarRefreshToken(string email)
+        {
+            var randomNumber = new byte[32];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomNumber);
+            }
+
+            var refreshToken = Convert.ToBase64String(randomNumber);
+
+            // Buscar al usuario en la base de datos
+            var usuario = await _userManager.Users.FirstOrDefaultAsync(c => c.Email == email);
+            if (usuario != null)
+            {
+                // Guardar el Refresh Token y su fecha de expiración
+                usuario.RefreshToken = refreshToken;
+                usuario.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); // Expira en 7 días
+                await _userManager.UpdateAsync(usuario);
+            }
+
+            return refreshToken;
+
+        }
+
+        public async Task<dynamic> RefreshToken(string email, string refreshToken)
+        {
+            var usuario = await _userManager.Users.FirstOrDefaultAsync(c => c.Email == email);
+            if (usuario != null && usuario.RefreshToken == refreshToken && usuario.RefreshTokenExpiryTime > DateTime.UtcNow)
+            {
+                var roles = await _userManager.GetRolesAsync(usuario);
+                var token = await GenerarToken(usuario, roles);
+                return new { token = token };
+            }
+            else
+            {
+                return new { message = "Refresh token inválido o expirado" };
+            }
         }
 
         public async Task<dynamic> Register(UsuarioRegisterDto registro)

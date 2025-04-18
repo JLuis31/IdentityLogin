@@ -51,7 +51,7 @@ namespace Aplication.Controllers
             // Retornar el token si el inicio de sesión fue exitoso
             if (result.GetType().GetProperty("token") != null)
             {
-                return Ok(new { token = result.token });
+                return Ok(new { token = result.token, refreshToken = result.refreshToken });
             }
 
             return BadRequest("Error desconocido.");
@@ -87,11 +87,10 @@ namespace Aplication.Controllers
         public async Task<IActionResult> ObtenerUsuarios()
         {
 
+
             var usuarios = await _loginRegister.ObtenerUsuario();
             return Ok(usuarios);
         }
-
-
 
         [HttpPost("ObtenerUsuarioEmail")]
         public async Task<IActionResult> ObtenerUsuarioEmai([FromForm] string email)

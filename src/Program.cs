@@ -11,6 +11,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using System.Security.Claims;
 using System.IdentityModel.Tokens.Jwt;
+using Microsoft.Extensions.DependencyInjection;
 
 public static class Program
 {
@@ -165,6 +166,7 @@ public static class Program
         app.UseCors("AllowAllOrigins");
         app.UseAuthentication();
         app.UseAuthorization();
+
 
 
         app.UseStaticFiles();
