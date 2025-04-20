@@ -145,6 +145,8 @@ namespace Aplication.Repositorios
                     Email = registro.Email,
                     UserName = registro.Email,
                     NormalizedUserName = registro.Email.ToUpper(),
+                    RefreshToken = "1",
+                    RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7) // Expira en 7 días
                 };
 
                 await _userManager.CreateAsync(Usuario, registro.Password);
@@ -219,6 +221,15 @@ namespace Aplication.Repositorios
             {
                 return new { message = "El usuario no existe" };
             }
+        }
+
+        public async Task<IList<string>> ObtenerRolesUsuario(string email)
+        {
+            var usuario = await _userManager.Users.FirstOrDefaultAsync(c => c.Email == email);
+            if (usuario == null)
+                return new List<string>();
+
+            return await _userManager.GetRolesAsync(usuario);
         }
     }
 }

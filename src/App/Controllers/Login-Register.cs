@@ -1,7 +1,10 @@
+using System.Security.Claims;
 using Aplication.DTOs;
 using Aplication.Intrfaces;
 using Aplication.Models;
 using AutoMapper;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
@@ -120,5 +123,59 @@ namespace Aplication.Controllers
             }
             return Ok(usuario);
         }
+
+        [HttpGet("signing-google")]
+        public IActionResult LoginWithGoogle()
+        {
+            // Redirige al usuario al flujo de autenticación de Google
+            var redirectUrl = Url.Action("GoogleCallback", "Auth");
+            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
+            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+        }
+
+        [HttpGet("google-callback")]
+        public async Task<IActionResult> GoogleCallback()
+        {
+            // Maneja la respuesta de Google después de la autenticación
+            var authenticateResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+
+            if (!authenticateResult.Succeeded)
+                return Unauthorized("Error al autenticar con Google.");
+
+            // Extraer información del usuario autenticado
+            var email = authenticateResult.Principal.FindFirst(ClaimTypes.Email)?.Value;
+            var name = authenticateResult.Principal.FindFirst(ClaimTypes.Name)?.Value;
+
+            if (string.IsNullOrEmpty(email))
+                return BadRequest("No se pudo obtener el email del usuario.");
+
+            // Buscar o registrar al usuario en tu base de datos
+            var usuario = await _loginRegister.ObtenerUsuarioEmail(email);
+            if (usuario == null)
+            {
+                // Registrar al usuario si no existe
+                var registro = new UsuarioRegisterDto
+                {
+                    Nombre = name,
+                    Email = email,
+                    Password = Guid.NewGuid().ToString() // Generar una contraseña aleatoria
+                };
+                await _loginRegister.Register(registro);
+                usuario = await _loginRegister.ObtenerUsuarioEmail(email);
+            }
+
+            // Obtener los roles del usuario
+            var roles = await _loginRegister.ObtenerRolesUsuario(email);
+
+            // Generar un token JWT para el usuario
+            var token = await _loginRegister.GenerarToken(usuario, roles);
+
+            return Ok(new
+            {
+                message = "Autenticado con Google",
+                token = token
+            });
+        }
+
     }
 }

@@ -14,5 +14,6 @@ namespace Aplication.Intrfaces
         Task<dynamic> ObtenerUsuario();
 
         Task<dynamic> EliminarUsuario(string email);
+        Task<IList<string>> ObtenerRolesUsuario(string email);
     }
 }
