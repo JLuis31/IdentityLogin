@@ -4,8 +4,10 @@ using Aplication.Intrfaces;
 using Aplication.Models;
 using AutoMapper;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 
@@ -18,11 +20,14 @@ namespace Aplication.Controllers
     public class LoginRegisterController : ControllerBase
     {
         private readonly ILoginRegister _loginRegister;
+        private readonly SignInManager<Usuario> _signInManager;
+        private readonly UserManager<Usuario> _userManager;
         private readonly IMapper _mapper;
-        public LoginRegisterController(ILoginRegister loginRegister, IMapper mapper)
+        public LoginRegisterController(UserManager<Usuario> _UserManager, SignInManager<Usuario> signInManager, ILoginRegister loginRegister, IMapper mapper)
         {
-
+            _userManager = _UserManager;
             _loginRegister = loginRegister;
+            _signInManager = signInManager;
             _mapper = mapper;
         }
 
@@ -38,7 +43,6 @@ namespace Aplication.Controllers
 
             dynamic result = await _loginRegister.Login(login.Email, login.Password);
 
-            // Verificar si result tiene una propiedad message
             if (result.GetType().GetProperty("message") != null)
             {
                 if (result.message.StartsWith("El usuario no existe") || result.message.StartsWith("La contraseña es incorrecta"))
@@ -51,7 +55,6 @@ namespace Aplication.Controllers
                 }
             }
 
-            // Retornar el token si el inicio de sesión fue exitoso
             if (result.GetType().GetProperty("token") != null)
             {
                 return Ok(new { token = result.token, refreshToken = result.refreshToken });
@@ -124,58 +127,82 @@ namespace Aplication.Controllers
             return Ok(usuario);
         }
 
-        [HttpGet("signing-google")]
-        public IActionResult LoginWithGoogle()
+        [HttpGet]
+        [Route("login")]
+        public Task LoginWithGoogle()
         {
-            // Redirige al usuario al flujo de autenticación de Google
-            var redirectUrl = Url.Action("GoogleCallback", "Auth");
-            var properties = new AuthenticationProperties { RedirectUri = redirectUrl };
-            return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+            var redirectUrl = "https://localhost:7175/api/Auth/signin-google";
+            var properties = _signInManager.ConfigureExternalAuthenticationProperties(GoogleDefaults.AuthenticationScheme, redirectUrl);
+            return HttpContext.ChallengeAsync(GoogleDefaults.AuthenticationScheme, properties);
         }
 
-        [HttpGet("google-callback")]
-        public async Task<IActionResult> GoogleCallback()
+        [HttpGet]
+        [AllowAnonymous]
+        [Route("signin-google")]
+        public async Task<IActionResult> SignInGoogle(string returnUrl = null, string remoteError = null)
         {
-            // Maneja la respuesta de Google después de la autenticación
-            var authenticateResult = await HttpContext.AuthenticateAsync(GoogleDefaults.AuthenticationScheme);
+            if (remoteError != null)
+                return BadRequest($"Error from external provider: {remoteError}");
 
-            if (!authenticateResult.Succeeded)
-                return Unauthorized("Error al autenticar con Google.");
+            var info = await _signInManager.GetExternalLoginInfoAsync();
+            if (info == null)
+                return BadRequest("Error loading external login information.");
 
-            // Extraer información del usuario autenticado
-            var email = authenticateResult.Principal.FindFirst(ClaimTypes.Email)?.Value;
-            var name = authenticateResult.Principal.FindFirst(ClaimTypes.Name)?.Value;
+            var result = await _signInManager.ExternalLoginSignInAsync(info.LoginProvider, info.ProviderKey, false);
 
-            if (string.IsNullOrEmpty(email))
-                return BadRequest("No se pudo obtener el email del usuario.");
-
-            // Buscar o registrar al usuario en tu base de datos
-            var usuario = await _loginRegister.ObtenerUsuarioEmail(email);
-            if (usuario == null)
+            if (result.Succeeded)
             {
-                // Registrar al usuario si no existe
-                var registro = new UsuarioRegisterDto
+                var email = info.Principal.FindFirstValue(ClaimTypes.Email);
+                var usuario = await _userManager.FindByEmailAsync(email);
+
+                if (usuario == null)
                 {
-                    Nombre = name,
-                    Email = email,
-                    Password = Guid.NewGuid().ToString() // Generar una contraseña aleatoria
-                };
-                await _loginRegister.Register(registro);
-                usuario = await _loginRegister.ObtenerUsuarioEmail(email);
+                    return BadRequest("Usuario no encontrado.");
+                }
+
+                var roles = await _loginRegister.ObtenerRolesUsuario(email);
+                var jwt = await _loginRegister.GenerarToken(usuario, roles);
+                var refreshToken = await _loginRegister.GenerarRefreshToken(email);
+                return Content($"Hola, tu token: {jwt} y tu refresh token: {refreshToken} y tu email: {email}");
             }
 
-            // Obtener los roles del usuario
-            var roles = await _loginRegister.ObtenerRolesUsuario(email);
 
-            // Generar un token JWT para el usuario
-            var token = await _loginRegister.GenerarToken(usuario, roles);
+            var userEmail = info.Principal.FindFirstValue(ClaimTypes.Email);
+            var name = info.Principal.FindFirstValue(ClaimTypes.Name);
 
-            return Ok(new
+            var existingUser = await _userManager.FindByEmailAsync(userEmail);
+            if (existingUser != null)
             {
-                message = "Autenticado con Google",
-                token = token
-            });
+
+                var roles = await _loginRegister.ObtenerRolesUsuario(userEmail);
+                var jwt = await _loginRegister.GenerarToken(existingUser, roles);
+                var refreshToken = await _loginRegister.GenerarRefreshToken(userEmail);
+
+                return Ok($"Usuario autenticado. Token: {jwt} y RefreshToken: {refreshToken}");
+            }
+
+            var user = await _loginRegister.RegistrarUsuarioDesdeGoogleAsync(userEmail, name, info);
+            if (user == null)
+            {
+                return BadRequest("Error al registrar el usuario desde Google.");
+            }
+
+            return Ok($"Usuario registrado desde Google. Estos son tus datos: {user.email}, tu nombre es: {user.nombre}, tu token es: {user.accestoken}, y tu refresh token es: {user.refreshToken}");
         }
+
+
+        [HttpGet]
+        [AllowAnonymous]
+        [Route("logout-google")]
+        public async Task<IActionResult> LogoutGoogle()
+        {
+
+            await _signInManager.SignOutAsync();
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return Ok("Logout exitoso. Puedes cerrar sesión en Google desde tu navegador.");
+        }
+
+
 
     }
 }

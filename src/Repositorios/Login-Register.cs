@@ -11,6 +11,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
+using Azure.Core;
 
 namespace Aplication.Repositorios
 {
@@ -127,6 +128,57 @@ namespace Aplication.Repositorios
             {
                 return new { message = "Refresh token inválido o expirado" };
             }
+        }
+        public async Task<dynamic> RegistrarUsuarioDesdeGoogleAsync(string email, string nombre, ExternalLoginInfo info)
+        {
+            // Generamos el refresh token
+            var refreshToken = await GenerarRefreshToken(email);
+
+            // Creamos el usuario con los datos proporcionados
+            var user = new Usuario
+            {
+                UserName = email,
+                Email = email,
+                Nombre = nombre,
+                RefreshToken = refreshToken,
+            };
+
+            // Intentamos crear el usuario
+            var createResult = await _userManager.CreateAsync(user);
+            string token = string.Empty;
+
+            if (createResult.Succeeded)
+            {
+                // Vinculamos el login de Google al usuario
+                await _userManager.AddLoginAsync(user, info);
+
+                // Determinamos si el usuario es el primer usuario para asignarle el rol de Admin
+                var esPrimerUsuario = !await _userManager.Users.AnyAsync(u => u.Id != user.Id);
+                var rolAsignado = esPrimerUsuario ? "Admin" : "User";
+
+                // Comprobamos si el rol existe, si no lo creamos
+                var rolExistente = await _roleManager.FindByNameAsync(rolAsignado);
+                if (rolExistente == null)
+                {
+                    rolExistente = new IdentityRole(rolAsignado);
+                    await _roleManager.CreateAsync(rolExistente);
+                }
+
+                // Asignamos el rol al usuario
+                await _userManager.AddToRoleAsync(user, rolAsignado);
+
+                // Generamos el token de acceso
+                token = await GenerarToken(user, new List<string> { rolAsignado });
+            }
+
+            // Retornamos los datos del usuario y los tokens
+            return new
+            {
+                email = user.Email,
+                nombre = user.Nombre,
+                refreshToken = user.RefreshToken,
+                accestoken = token
+            };
         }
 
         public async Task<dynamic> Register(UsuarioRegisterDto registro)
