@@ -170,17 +170,6 @@ namespace Aplication.Controllers
             var userEmail = info.Principal.FindFirstValue(ClaimTypes.Email);
             var name = info.Principal.FindFirstValue(ClaimTypes.Name);
 
-            var existingUser = await _userManager.FindByEmailAsync(userEmail);
-            if (existingUser != null)
-            {
-
-                var roles = await _loginRegister.ObtenerRolesUsuario(userEmail);
-                var jwt = await _loginRegister.GenerarToken(existingUser, roles);
-                var refreshToken = await _loginRegister.GenerarRefreshToken(userEmail);
-
-                return Ok($"Usuario autenticado. Token: {jwt} y RefreshToken: {refreshToken}");
-            }
-
             var user = await _loginRegister.RegistrarUsuarioDesdeGoogleAsync(userEmail, name, info);
             if (user == null)
             {

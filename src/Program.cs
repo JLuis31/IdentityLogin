@@ -19,6 +19,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.OpenApi.Writers;
 
 public static class Program
 {
@@ -174,9 +175,10 @@ public static class Program
             googleOptions.Scope.Add("profile");
             googleOptions.Scope.Add("email");
             googleOptions.ClaimActions.MapJsonKey(ClaimTypes.NameIdentifier, "sub");
+            googleOptions.ClaimActions.MapJsonKey("picture", "picture");
             googleOptions.ClaimActions.MapJsonKey(ClaimTypes.Name, "name");
             googleOptions.ClaimActions.MapJsonKey(ClaimTypes.Email, "email");
-            googleOptions.SaveTokens = false;
+            googleOptions.SaveTokens = true;
             googleOptions.SignInScheme = IdentityConstants.ExternalScheme;
             googleOptions.Events = new OAuthEvents
             {
@@ -241,6 +243,12 @@ public static class Program
         app.UseHttpsRedirection();
         app.UseRouting();
 
+
+
+        app.UseCors("AllowAllOrigins");
+        app.UseCookiePolicy();
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.UseStatusCodePages(async context =>
         {
             var response = context.HttpContext.Response;
@@ -249,12 +257,6 @@ public static class Program
                 Console.WriteLine($"Código de estado: {response.StatusCode}");
             }
         });
-
-        app.UseCors("AllowAllOrigins");
-        app.UseCookiePolicy();
-        app.UseAuthentication();
-        app.UseAuthorization();
-
 
         app.UseStaticFiles();
         app.MapControllers();

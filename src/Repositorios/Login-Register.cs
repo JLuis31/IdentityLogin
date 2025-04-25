@@ -67,6 +67,7 @@ namespace Aplication.Repositorios
             {
              new Claim(JwtRegisteredClaimNames.Sub, usuario.Id),
              new Claim(JwtRegisteredClaimNames.UniqueName, usuario.Nombre),
+             new Claim(JwtRegisteredClaimNames.Email, usuario.Email),
              new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
 
@@ -84,7 +85,7 @@ namespace Aplication.Repositorios
                 issuer: _jwtSettings.Issuer,
                 audience: _jwtSettings.Audience,
                 claims: claims,
-                expires: DateTime.Now.AddMinutes(_jwtSettings.DurationInMinutes),
+                expires: DateTime.Now.AddSeconds(_jwtSettings.DurationInMinutes),
                 signingCredentials: creds
             );
             return Task.FromResult(new JwtSecurityTokenHandler().WriteToken(token));
@@ -107,7 +108,7 @@ namespace Aplication.Repositorios
             {
                 // Guardar el Refresh Token y su fecha de expiración
                 usuario.RefreshToken = refreshToken;
-                usuario.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(7); // Expira en 7 días
+                usuario.RefreshTokenExpiryTime = DateTime.UtcNow.AddSeconds(30); // Expira en 7 días
                 await _userManager.UpdateAsync(usuario);
             }
 
